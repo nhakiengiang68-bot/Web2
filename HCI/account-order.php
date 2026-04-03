@@ -1,74 +1,40 @@
-
 <?php
-require_once __DIR__ . '/includes/bootstrap.php';
-$page_title = 'Đơn hàng của tôi';
-$user = current_user($conn);
-$orders = [];
-$userId = $user ? (int) $user['id'] : 0;
-
-if ($user) {
-    $stmt = mysqli_prepare($conn, 'SELECT o.*, COUNT(oi.id) AS item_count, SUM(oi.quantity) AS total_qty FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id WHERE o.user_id = ? GROUP BY o.id ORDER BY o.date DESC, o.id DESC');
-    mysqli_stmt_bind_param($stmt, 'i', $userId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    if ($result) {
-        $orders = mysqli_fetch_all($result, MYSQLI_ASSOC);
-    }
-    mysqli_stmt_close($stmt);
-}
+require_once 'includes/app.php';
+require_login();
+$pageTitle = 'Đơn hàng của tôi';
+$pageBreadcrumb = 'Đơn hàng của tôi';
+$user = current_user();
+$orders = fetch_all('SELECT * FROM orders WHERE user_id = ' . (int) $user['id'] . ' ORDER BY `date` DESC, id DESC');
 
 include 'includes/header.php';
 include 'includes/sidebar.php';
 include 'includes/topnav.php';
 ?>
-
 <div id="content-page" class="content-page">
    <div class="container-fluid">
       <div class="row">
-         <div class="col-12">
+         <div class="col-lg-12">
             <div class="iq-card">
-               <div class="iq-card-header d-flex justify-content-between align-items-center">
-                  <h4 class="card-title mb-0">Đơn hàng của tôi</h4>
-                  <?php if ($user): ?>
-                     <a href="profile.php" class="btn btn-outline-primary btn-sm">Hồ sơ</a>
-                  <?php endif; ?>
-               </div>
+               <div class="iq-card-header d-flex justify-content-between"><h4 class="card-title mb-0">Đơn hàng của tôi</h4></div>
                <div class="iq-card-body">
-                  <?php if (!$user): ?>
-                     <div class="text-center py-5">
-                        <h5 class="mb-3">Bạn chưa đăng nhập</h5>
-                        <a href="sign-in.php" class="btn btn-primary">Đăng nhập</a>
-                     </div>
+                  <?php if ($orders): ?>
+                     <?php foreach ($orders as $order): ?>
+                        <?php $items = order_items_for((int) $order['id']); $first = $items[0]['book_code'] ?? ''; ?>
+                        <a href="Checkout-success.php?id=<?php echo (int) $order['id']; ?>" class="d-block mb-3">
+                           <div class="media align-items-center border rounded p-3">
+                              <div class="col-sm-1 p-0"><img width="90" height="90" class="img-fluid rounded" src="<?php echo h(isset($items[0]) ? book_image_src($items[0], (int) ($items[0]['book_id'] ?? 1)) : 'images/checkout/01.jpg'); ?>" alt=""></div>
+                              <div class="col-sm-5">
+                                 <h6 class="mb-1"><?php echo h($items[0]['bookname'] ?? ''); ?></h6>
+                                 <p class="mb-1">x<?php echo count($items); ?></p>
+                                 <small class="text-muted">Mã đơn: #DH<?php echo str_pad((string) $order['id'], 6, '0', STR_PAD_LEFT); ?></small>
+                              </div>
+                              <div class="col-sm-4"><p class="mb-0">Tổng tiền: <strong><?php echo vn_money($order['price']); ?> đ</strong></p></div>
+                              <div class="col-sm-2 text-right"><p class="mb-0 <?php echo $order['status'] === 'delivered' ? 'text-primary' : ($order['status'] === 'cancelled' ? 'text-danger' : 'text-warning'); ?>"><?php echo h($order['status']); ?></p></div>
+                           </div>
+                        </a>
+                     <?php endforeach; ?>
                   <?php else: ?>
-                     <div class="table-responsive">
-                        <table class="table table-bordered mb-0">
-                           <thead class="thead-light">
-                              <tr>
-                                 <th>Mã đơn</th>
-                                 <th>Ngày</th>
-                                 <th>Số sản phẩm</th>
-                                 <th>Tổng tiền</th>
-                                 <th>Trạng thái</th>
-                                 <th>Thanh toán</th>
-                              </tr>
-                           </thead>
-                           <tbody>
-                              <?php foreach ($orders as $order): ?>
-                                 <tr>
-                                    <td>#<?= (int) $order['id'] ?></td>
-                                    <td><?= h($order['date']) ?></td>
-                                    <td><?= (int) ($order['total_qty'] ?? 0) ?></td>
-                                    <td><?= h(money_vn($order['price'])) ?></td>
-                                    <td><?= h($order['status']) ?></td>
-                                    <td><?= h($order['payment_method']) ?></td>
-                                 </tr>
-                              <?php endforeach; ?>
-                              <?php if (!$orders): ?>
-                                 <tr><td colspan="6" class="text-center text-muted py-4">Chưa có đơn hàng nào.</td></tr>
-                              <?php endif; ?>
-                           </tbody>
-                        </table>
-                     </div>
+                     <div class="alert alert-info mb-0">Bạn chưa có đơn hàng nào.</div>
                   <?php endif; ?>
                </div>
             </div>
@@ -76,5 +42,4 @@ include 'includes/topnav.php';
       </div>
    </div>
 </div>
-
 <?php include 'includes/footer.php'; ?>

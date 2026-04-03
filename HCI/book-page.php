@@ -1,49 +1,53 @@
-
 <?php
-require_once __DIR__ . '/includes/bootstrap.php';
-$id = (int) ($_GET['id'] ?? 0);
-$page_title = 'Chi tiết sách';
+require_once 'includes/app.php';
+$pageTitle = 'Chi tiết sản phẩm';
+$pageBreadcrumb = 'Chi tiết sản phẩm';
 
-$book = null;
-if ($id > 0) {
-    $stmt = mysqli_prepare($conn, 'SELECT b.*, a.fullname AS author_name FROM books b INNER JOIN authors a ON a.id = b.author_id WHERE b.id = ? LIMIT 1');
-    mysqli_stmt_bind_param($stmt, 'i', $id);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    $book = $result ? mysqli_fetch_assoc($result) : null;
-    mysqli_stmt_close($stmt);
-}
-
-if (!$book) {
-    $fallback = mysqli_query($conn, "SELECT b.*, a.fullname AS author_name FROM books b INNER JOIN authors a ON a.id = b.author_id WHERE " . public_book_status_sql() . " ORDER BY b.updated_at DESC, b.id DESC LIMIT 1");
-    if ($fallback) {
-        $book = mysqli_fetch_assoc($fallback);
-        mysqli_free_result($fallback);
+if (isset($_GET['favorite'])) {
+    $user = current_user();
+    if (!$user) {
+        flash('warning', 'Vui lòng đăng nhập để thêm vào yêu thích.');
+        redirect('sign-in.php');
     }
+    $toggleId = (int) ($_GET['id'] ?? 0);
+    if ($toggleId > 0) {
+        $wasFavourite = favourite_exists((int) $user['id'], $toggleId);
+        if (favourite_toggle((int) $user['id'], $toggleId)) {
+            flash('success', $wasFavourite ? 'Đã xóa khỏi yêu thích.' : 'Đã thêm vào yêu thích.');
+        }
+    }
+    redirect('book-page.php?id=' . $toggleId);
 }
 
-$categories = $book ? fetch_book_categories($conn, (int) $book['id']) : [];
-$page_title = $book ? $book['bookname'] : 'Chi tiết sách';
+if (isset($_GET['add'])) {
+    $addId = (int) $_GET['add'];
+    if ($addId > 0) {
+        cart_add($addId, 1);
+        flash('success', 'Đã thêm sản phẩm vào giỏ hàng.');
+    }
+    redirect('Checkout.php');
+}
 
-$similarBooks = [];
-if ($book) {
-    $bookId = (int) $book['id'];
-    $authorId = (int) $book['author_id'];
-    $similarSql = "SELECT DISTINCT b.*, a.fullname AS author_name
-                   FROM books b
-                   INNER JOIN authors a ON a.id = b.author_id
-                   LEFT JOIN book_category bc ON bc.book_id = b.id
-                   WHERE (b.status = 'active' OR b.status = 'visible')
-                     AND b.id <> {$bookId}
-                     AND (b.author_id = {$authorId} OR bc.category_id IN (
-                         SELECT category_id FROM book_category WHERE book_id = {$bookId}
-                     ))
-                   ORDER BY b.updated_at DESC, b.id DESC
-                   LIMIT 8";
-    $similarResult = mysqli_query($conn, $similarSql);
-    if ($similarResult) {
-        $similarBooks = mysqli_fetch_all($similarResult, MYSQLI_ASSOC);
-        mysqli_free_result($similarResult);
+$bookId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
+$currentBook = $bookId > 0 ? book_detail($bookId) : null;
+$related = [];
+$isFavourite = false;
+if ($currentBook) {
+    $user = current_user();
+    $isFavourite = $user ? favourite_exists((int) $user['id'], (int) $currentBook['id']) : false;
+
+    $categoryIds = book_category_ids((int) $currentBook['id']);
+    if ($categoryIds) {
+        $categoryList = implode(',', array_map('intval', $categoryIds));
+        $related = fetch_all('
+            SELECT DISTINCT b.*, a.fullname AS author_name
+            FROM books b
+            LEFT JOIN authors a ON a.id = b.author_id
+            JOIN book_category bc ON bc.book_id = b.id
+            WHERE ' . books_visible_condition('b') . ' AND b.id <> ' . (int) $currentBook['id'] . ' AND bc.category_id IN (' . $categoryList . ')
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT 6
+        ');
     }
 }
 
@@ -51,10 +55,9 @@ include 'includes/header.php';
 include 'includes/sidebar.php';
 include 'includes/topnav.php';
 ?>
-
 <div id="content-page" class="content-page">
+   <?php render_flash(); ?>
    <div class="container-fluid">
-      <?php if ($book): ?>
       <div class="row">
          <div class="col-sm-12">
             <div class="iq-card iq-card-block iq-card-stretch iq-card-height">
@@ -62,88 +65,57 @@ include 'includes/topnav.php';
                   <h4 class="card-title mb-0">Thông tin</h4>
                </div>
                <div class="iq-card-body pb-0">
-                  <div class="description-contens align-items-top row">
-                     <div class="col-md-6">
-                        <div class="col-9">
-                           <img src="<?= book_cover_url($book) ?>" class="img-fluid w-100 rounded" alt="<?= h($book['bookname']) ?>">
+                  <?php if ($currentBook): ?>
+                     <div class="description-contens align-items-top row">
+                        <div class="col-md-5 mb-4">
+                           <div class="col-12 p-0">
+                              <img src="<?php echo h(book_image_src($currentBook, (int) $currentBook['id'])); ?>" class="img-fluid w-100 rounded" alt="">
+                           </div>
                         </div>
-                     </div>
-                     <div class="col-md-6">
-                        <div class="iq-card-transparent iq-card-block iq-card-stretch iq-card-height">
-                           <div class="iq-card-body p-0">
-                              <h3 class="mb-3"><?= h($book['bookname']) ?></h3>
-                              <div class="price d-flex align-items-center font-weight-500 mb-2">
-                                 <span class="font-size-20 pr-2 old-price"><?= h(money_vn($book['cost_price'])) ?></span>
-                                 <span class="font-size-24 text-dark"><?= h(money_vn($book['sell_price'])) ?></span>
-                              </div>
-                              <div class="mb-3 d-block">
-                                 <span class="font-size-20 text-warning"><i class="fa fa-star mr-1"></i><i class="fa fa-star mr-1"></i><i class="fa fa-star mr-1"></i><i class="fa fa-star mr-1"></i><i class="fa fa-star"></i></span>
-                              </div>
-                              <div class="text-dark mb-4 pb-4 iq-border-bottom d-block"><?= nl2br(h($book['info'])) ?></div>
-                              <div class="text-primary mb-2">Tác giả: <span class="text-body"><?= h($book['author_name']) ?></span></div>
-                              <div class="text-primary mb-2">Mã sách: <span class="text-body"><?= h($book['book_code']) ?></span></div>
-                              <div class="text-primary mb-2">Danh mục: <span class="text-body"><?= h(implode(', ', array_column($categories, 'name'))) ?></span></div>
-                              <div class="text-primary mb-4">Tình trạng: <span class="text-body"><?= h($book['status']) ?></span></div>
-                              <div class="mb-4 d-flex align-items-center">
-                                 <a href="Checkout.php?book_id=<?= (int) $book['id'] ?>" class="btn btn-primary view-more mr-2">Thêm vào giỏ hàng</a>
-                                 <a href="Checkout.php?book_id=<?= (int) $book['id'] ?>" class="btn btn-primary view-more mr-2">Mua ngay</a>
-                              </div>
-                              <div class="mb-3">
-                                 <a href="#" class="text-body text-center"><span class="avatar-30 rounded-circle bg-primary d-inline-block mr-2"><i class="ri-heart-fill"></i></span><span>Thêm vào danh sách yêu thích</span></a>
-                              </div>
+                        <div class="col-md-7">
+                           <h3 class="mb-3"><?php echo h($currentBook['bookname']); ?></h3>
+                           <p class="mb-1">Tác giả: <strong><?php echo h($currentBook['author_name'] ?? ''); ?></strong></p>
+                           <p class="mb-1">Mã sách: <strong><?php echo h($currentBook['book_code'] ?? ''); ?></strong></p>
+                           <p class="mb-1">Phân loại: <strong><?php echo h($currentBook['categories_text'] ?? ''); ?></strong></p>
+                           <div class="price d-flex align-items-center my-3"><h4 class="text-primary mb-0"><?php echo vn_money(book_sell_price($currentBook)); ?> đ</h4></div>
+                           <div class="d-flex align-items-center mb-3">
+                              <span class="font-size-11 text-warning mr-2"><?php echo render_stars(); ?></span>
+                              <span class="text-muted">Kho: <?php echo (int) $currentBook['stock_quantity']; ?></span>
+                           </div>
+                           <p class="mb-4"><?php echo nl2br(h($currentBook['info'] ?? 'Chưa có mô tả.')); ?></p>
+                           <div class="d-flex flex-wrap">
+                              <a href="Checkout.php?add=<?php echo (int) $currentBook['id']; ?>" class="btn btn-primary mr-2 mb-2">Thêm vào giỏ</a>
+                              <a href="book-page.php?id=<?php echo (int) $currentBook['id']; ?>&favorite=1" class="btn btn-outline-danger mr-2 mb-2"><?php echo $isFavourite ? 'Bỏ yêu thích' : 'Yêu thích'; ?></a>
+                              <a href="Checkout-preview.php" class="btn btn-outline-primary mb-2">Xem thanh toán</a>
                            </div>
                         </div>
                      </div>
-                  </div>
+                  <?php else: ?>
+                     <div class="alert alert-info">Không tìm thấy sản phẩm.</div>
+                  <?php endif; ?>
                </div>
             </div>
          </div>
+      </div>
+
+      <?php if ($related): ?>
+      <div class="row">
          <div class="col-lg-12">
             <div class="iq-card iq-card-block iq-card-stretch iq-card-height">
                <div class="iq-card-header d-flex justify-content-between align-items-center position-relative">
-                  <div class="iq-header-title"><h4 class="card-title mb-0">Sản phẩm tương tự</h4></div>
-                  <div class="iq-card-header-toolbar d-flex align-items-center">
-                     <a href="search.php" class="btn btn-primary">Xem thêm</a>
-                  </div>
+                  <div class="iq-header-title"><h4 class="card-title mb-0">Sách tương tự</h4></div>
                </div>
-               <div class="iq-card-body single-similar-contens">
+               <div class="iq-card-body">
                   <div class="row">
-                     <?php foreach ($similarBooks as $similar): ?>
-                        <div class="col-md-3 mb-4">
-                           <div class="card h-100">
-                              <img src="<?= book_cover_url($similar) ?>" class="card-img-top" alt="<?= h($similar['bookname']) ?>">
-                              <div class="card-body">
-                                 <h6 class="card-title"><?= h($similar['bookname']) ?></h6>
-                                 <p class="card-text text-muted mb-2"><?= h($similar['author_name']) ?></p>
-                                 <p class="mb-2"><b><?= h(money_vn($similar['sell_price'])) ?></b></p>
-                                 <a href="<?= book_url((int) $similar['id']) ?>" class="btn btn-outline-primary btn-sm">Chi tiết</a>
-                              </div>
-                           </div>
-                        </div>
+                     <?php foreach ($related as $i => $row): ?>
+                        <?php echo render_book_card($row, $i + 1, 'Xem sách'); ?>
                      <?php endforeach; ?>
-                     <?php if (!$similarBooks): ?>
-                        <div class="col-12">
-                           <div class="public-empty-state text-muted">Chưa có sản phẩm tương tự.</div>
-                        </div>
-                     <?php endif; ?>
                   </div>
                </div>
             </div>
          </div>
       </div>
-      <?php else: ?>
-         <div class="row">
-            <div class="col-12">
-               <div class="iq-card">
-                  <div class="iq-card-body text-center">
-                     <p>Không tìm thấy sách.</p>
-                     <a href="search.php" class="btn btn-primary">Quay lại tìm kiếm</a>
-                  </div>
-               </div>
-            </div>
-         </div>
       <?php endif; ?>
    </div>
 </div>
-
 <?php include 'includes/footer.php'; ?>

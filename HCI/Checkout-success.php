@@ -1,37 +1,15 @@
-
 <?php
-require_once __DIR__ . '/includes/bootstrap.php';
-$page_title = 'Đặt hàng thành công';
-require_login('sign-in.php');
-$user = current_user($conn);
-$orderId = (int) ($_SESSION['last_order_id'] ?? ($_GET['order_id'] ?? 0));
-$userId = (int) $user['id'];
-$order = null;
-$items = [];
-
-if ($orderId > 0) {
-    $stmt = mysqli_prepare($conn, 'SELECT * FROM orders WHERE id = ? AND user_id = ? LIMIT 1');
-    mysqli_stmt_bind_param($stmt, 'ii', $orderId, $userId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    $order = $result ? mysqli_fetch_assoc($result) : null;
-    mysqli_stmt_close($stmt);
-
-    $stmt = mysqli_prepare($conn, 'SELECT oi.*, b.bookname, b.image FROM order_items oi INNER JOIN books b ON b.id = oi.book_id WHERE oi.order_id = ?');
-    mysqli_stmt_bind_param($stmt, 'i', $orderId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    if ($result) {
-        $items = mysqli_fetch_all($result, MYSQLI_ASSOC);
-    }
-    mysqli_stmt_close($stmt);
-}
+require_once 'includes/app.php';
+$pageTitle = 'Đặt hàng thành công';
+$pageBreadcrumb = 'Đặt hàng thành công';
+$orderId = (int) ($_GET['id'] ?? last_order_id() ?? 0);
+$order = $orderId > 0 ? order_summary($orderId) : null;
+$items = $orderId > 0 ? order_items_for($orderId) : [];
 
 include 'includes/header.php';
 include 'includes/sidebar.php';
 include 'includes/topnav.php';
 ?>
-
 <div id="content-page" class="content-page">
    <div class="container-fluid">
       <div class="row">
@@ -41,31 +19,26 @@ include 'includes/topnav.php';
                   <div class="mb-4"><i class="ri-checkbox-circle-line" style="font-size:48px; color:green;"></i></div>
                   <h3>Đặt hàng thành công!</h3>
                   <?php if ($order): ?>
-                     <p class="mb-2">Mã đơn hàng của bạn: <strong>#<?= (int) $order['id'] ?></strong></p>
-                     <p class="mb-4">Chúng tôi đã ghi nhận đơn hàng và sẽ sớm xử lý.</p>
+                     <p class="mb-2">Mã đơn hàng của bạn: <strong>#DH<?php echo str_pad((string) $orderId, 6, '0', STR_PAD_LEFT); ?></strong></p>
+                     <p class="mb-4">Đơn hàng đã được lưu vào cơ sở dữ liệu. Bạn có thể xem trong mục "Đơn hàng của tôi".</p>
                      <div class="row justify-content-center">
-                        <div class="col-md-8">
-                           <div class="card mb-3">
-                              <div class="card-body text-left">
-                                 <h6>Thông tin đơn hàng</h6>
-                                 <p class="mb-1"><strong>Số sản phẩm:</strong> <?= array_sum(array_column($items, 'quantity')) ?></p>
-                                 <p class="mb-1"><strong>Tổng thanh toán:</strong> <?= h(money_vn($order['price'])) ?></p>
-                                 <p class="mb-0"><strong>Phương thức:</strong> <?= h($order['payment_method']) ?></p>
-                              </div>
-                           </div>
-                           <a href="account-order.php" class="btn btn-outline-primary btn-block mb-2">Xem đơn hàng của tôi</a>
-                           <a href="index.php" class="btn btn-primary btn-block">Tiếp tục mua sắm</a>
+                        <div class="col-md-7">
+                           <div class="card mb-3"><div class="card-body text-left"><h6>Thông tin đơn hàng</h6><p class="mb-1"><strong>Số sản phẩm:</strong> <?php echo count($items); ?></p><p class="mb-1"><strong>Tổng thanh toán:</strong> <?php echo vn_money($order['price']); ?> đ</p><p class="mb-0"><strong>Phương thức:</strong> <?php echo h($order['payment_method']); ?></p></div></div>
                         </div>
                      </div>
                   <?php else: ?>
-                     <p class="mb-4">Không tìm thấy thông tin đơn hàng.</p>
-                     <a href="index.php" class="btn btn-primary">Về trang chủ</a>
+                     <p class="mb-4">Không tìm thấy đơn hàng gần nhất.</p>
                   <?php endif; ?>
+                  <div class="row justify-content-center">
+                     <div class="col-md-6">
+                        <a href="account-order.php" class="btn btn-outline-primary btn-block mb-2">Xem đơn hàng của tôi</a>
+                        <a href="index.php" class="btn btn-primary btn-block">Tiếp tục mua sắm</a>
+                     </div>
+                  </div>
                </div>
             </div>
          </div>
       </div>
    </div>
 </div>
-
 <?php include 'includes/footer.php'; ?>

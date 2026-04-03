@@ -1,128 +1,185 @@
-
 <?php
-require_once __DIR__ . '/includes/bootstrap.php';
-$page_title = 'Tài khoản của tôi';
-$user = current_user($conn);
-$defaultAddress = null;
-$recentOrders = [];
-$userId = $user ? (int) $user['id'] : 0;
-
-if ($user) {
-    $stmt = mysqli_prepare($conn, 'SELECT * FROM address WHERE user_id = ? ORDER BY is_default DESC, id DESC LIMIT 1');
-    mysqli_stmt_bind_param($stmt, 'i', $userId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    $defaultAddress = $result ? mysqli_fetch_assoc($result) : null;
-    mysqli_stmt_close($stmt);
-
-    $stmt = mysqli_prepare($conn, 'SELECT o.*, COUNT(oi.id) AS item_count, SUM(oi.quantity) AS total_qty FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id WHERE o.user_id = ? GROUP BY o.id ORDER BY o.date DESC, o.id DESC LIMIT 3');
-    mysqli_stmt_bind_param($stmt, 'i', $userId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    if ($result) {
-        $recentOrders = mysqli_fetch_all($result, MYSQLI_ASSOC);
-    }
-    mysqli_stmt_close($stmt);
+require_once 'includes/app.php';
+require_login();
+$pageTitle = 'Tài khoản của tôi';
+$pageBreadcrumb = 'Tài khoản của tôi';
+$user = current_user();
+$profile = fetch_one('SELECT * FROM users WHERE id = ' . (int) $user['id'] . ' LIMIT 1');
+$activeTab = $_GET['tab'] ?? 'personal-information';
+if (!in_array($activeTab, ['personal-information', 'account-info', 'manage-contact'], true)) {
+    $activeTab = 'personal-information';
 }
+
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_address'])) {
+    $activeTab = 'manage-contact';
+    $receiverName = trim((string) ($_POST['receiver_name'] ?? ''));
+    $phone = trim((string) ($_POST['phone'] ?? ''));
+    $addressDetail = trim((string) ($_POST['address_detail'] ?? ''));
+    $ward = trim((string) ($_POST['ward'] ?? ''));
+    $district = trim((string) ($_POST['district'] ?? ''));
+    $province = trim((string) ($_POST['province'] ?? ''));
+    $isDefault = isset($_POST['is_default']) ? 1 : 0;
+
+    if ($receiverName === '' || $phone === '' || $addressDetail === '' || $ward === '' || $district === '' || $province === '') {
+        $error = 'Vui lòng nhập đầy đủ địa chỉ.';
+    } else {
+        if ($isDefault) {
+            mysqli_query(db(), 'UPDATE address SET is_default = 0 WHERE user_id = ' . (int) $user['id']);
+        }
+
+        $stmt = mysqli_prepare(db(), '
+    INSERT INTO address 
+    (user_id, receiver_name, phone, address_detail, ward, district, province, is_default) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+');
+        mysqli_stmt_bind_param($stmt, 'issssssi', $user['id'], $receiverName, $phone, $addressDetail, $ward, $district, $province, $isDefault);
+        $ok = mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+
+        if ($ok) {
+            flash('success', 'Đã lưu địa chỉ.');
+            redirect('profile.php?tab=manage-contact');
+        }
+
+        $error = 'Không thể lưu địa chỉ.';
+        
+    }
+}
+
+$addresses = user_addresses((int) $user['id']);
+$addressForm = $addresses[0] ?? [
+    'receiver_name' => $profile['fullname'] ?? ($user['fullname'] ?? $user['username'] ?? ''),
+    'phone' => $profile['phone'] ?? ($user['phone'] ?? ''),
+    'address_detail' => '',
+    'ward' => '',
+    'district' => '',
+    'province' => '',
+    'is_default' => 1,
+];
 
 include 'includes/header.php';
 include 'includes/sidebar.php';
 include 'includes/topnav.php';
 ?>
-
 <div id="content-page" class="content-page">
    <div class="container-fluid">
       <div class="row">
          <div class="col-lg-12">
             <div class="iq-card">
-               <div class="iq-card-header d-flex justify-content-between align-items-center">
-                  <h4 class="card-title mb-0">Tài khoản của tôi</h4>
-                  <?php if ($user): ?>
-                     <a href="profile-edit.php" class="btn btn-primary btn-sm">Cập nhật hồ sơ</a>
-                  <?php else: ?>
-                     <a href="sign-in.php" class="btn btn-primary btn-sm">Đăng nhập</a>
-                  <?php endif; ?>
+               <div class="iq-card-body p-0">
+                  <div class="iq-edit-list">
+                     <ul class="iq-edit-profile d-flex nav nav-pills">
+                        <li class="col-md-4 p-0"><a
+                              class="nav-link <?php echo $activeTab === 'personal-information' ? 'active' : ''; ?>"
+                              data-toggle="pill" href="#personal-information">Thông tin cá nhân</a></li>
+                        <li class="col-md-4 p-0"><a
+                              class="nav-link <?php echo $activeTab === 'account-info' ? 'active' : ''; ?>"
+                              data-toggle="pill" href="#account-info">Tài khoản</a></li>
+                        <li class="col-md-4 p-0"><a
+                              class="nav-link <?php echo $activeTab === 'manage-contact' ? 'active' : ''; ?>"
+                              data-toggle="pill" href="#manage-contact">Quản lý liên hệ</a></li>
+                     </ul>
+                  </div>
                </div>
-               <div class="iq-card-body">
-                  <?php if ($user): ?>
-                     <div class="row">
-                        <div class="col-md-4">
-                           <div class="card h-100">
-                              <div class="card-body text-center">
-                                 <img src="images/avt.jpg" class="rounded-circle mb-3" width="96" height="96" alt="avatar">
-                                 <h5 class="mb-1"><?= h($user['fullname'] ?: $user['username']) ?></h5>
-                                 <p class="text-muted mb-1">@<?= h($user['username']) ?></p>
-                                 <p class="mb-0">Vai trò: <?= h($user['role']) ?></p>
-                                 <p class="mb-0">Trạng thái: <?= h($user['status']) ?></p>
-                              </div>
+            </div>
+         </div>
+         <div class="col-lg-12">
+            <div class="iq-edit-list-data">
+               <div class="tab-content">
+                  <div class="tab-pane fade <?php echo $activeTab === 'personal-information' ? 'active show' : ''; ?>"
+                     id="personal-information" role="tabpanel">
+                     <div class="iq-card">
+                        <div class="iq-card-header d-flex justify-content-between">
+                           <div class="iq-header-title">
+                              <h4 class="card-title">Thông tin cá nhân</h4>
                            </div>
                         </div>
-                        <div class="col-md-4">
-                           <div class="card h-100">
-                              <div class="card-body">
-                                 <h6 class="mb-3">Thông tin liên hệ</h6>
-                                 <p class="mb-2"><strong>Email:</strong> <?= h($user['email']) ?></p>
-                                 <p class="mb-2"><strong>Điện thoại:</strong> <?= h($user['phone']) ?></p>
-                                 <p class="mb-2"><strong>Họ tên:</strong> <?= h($user['fullname']) ?></p>
-                                 <p class="mb-0"><strong>Địa chỉ mặc định:</strong><br><?= $defaultAddress ? h($defaultAddress['address_detail'] . ', ' . $defaultAddress['ward'] . ', ' . $defaultAddress['district'] . ', ' . $defaultAddress['province']) : 'Chưa có địa chỉ' ?></p>
-                              </div>
-                           </div>
-                        </div>
-                        <div class="col-md-4">
-                           <div class="card h-100">
-                              <div class="card-body">
-                                 <h6 class="mb-3">Thao tác nhanh</h6>
-                                 <a href="account-order.php" class="btn btn-outline-primary btn-block mb-2">Xem đơn hàng</a>
-                                 <a href="profile-edit.php" class="btn btn-primary btn-block mb-2">Sửa thông tin</a>
-                                 <a href="logout.php" class="btn btn-danger btn-block">Đăng xuất</a>
-                              </div>
-                           </div>
+                        <div class="iq-card-body">
+                           <div class="row align-items-center">
+                              <div class="form-group col-sm-6"><label>Họ và tên:</label>
+                                 <?php echo h($profile['fullname'] ?? ''); ?></div>
+                              <div class="form-group col-sm-6"><label>Email:</label>
+                                 <?php echo h($profile['email'] ?? ''); ?></div>
+                              <div class="form-group col-sm-6"><label>Giới tính:</label>
+                                 <?php echo h($profile['gender'] ?? 'Chưa cập nhật'); ?></div>
+                              <div class="form-group col-sm-6"><label>Ngày sinh:</label>
+                                 <?php echo h($profile['birthday'] ?? 'Chưa cập nhật'); ?></div>
+                           </div><a href="account-edit.php" class="btn btn-primary mr-2">Chỉnh sửa</a>
                         </div>
                      </div>
+                  </div>
+                  <div class="tab-pane fade <?php echo $activeTab === 'account-info' ? 'active show' : ''; ?>"
+                     id="account-info" role="tabpanel">
+                     <div class="iq-card">
+                        <div class="iq-card-header d-flex justify-content-between">
+                           <div class="iq-header-title">
+                              <h4 class="card-title">Tài khoản</h4>
+                           </div>
+                        </div>
+                        <div class="iq-card-body">
+                           <div class="row">
+                              <div class="form-group col-sm-6"><label>Tên tài khoản</label><input type="text"
+                                    class="form-control" value="<?php echo h($profile['username'] ?? ''); ?>" readonly>
+                              </div>
+                              <div class="form-group col-sm-6"><label>Email</label><input type="email"
+                                    class="form-control" value="<?php echo h($profile['email'] ?? ''); ?>" readonly>
+                              </div>
+                              <div class="form-group col-sm-6"><label>Trạng thái</label><input type="text"
+                                    class="form-control" value="<?php echo h($profile['status'] ?? ''); ?>" readonly>
+                              </div>
+                           </div><a href="account-edit.php" class="btn btn-primary mr-2">Sửa</a>
+                        </div>
+                     </div>
+                  </div>
+                  <div class="tab-pane fade <?php echo $activeTab === 'manage-contact' ? 'active show' : ''; ?>"
+                     id="manage-contact" role="tabpanel">
+                     <div class="iq-card">
+                        <div class="iq-card-header">
+                           <h4 class="card-title">Quản lý liên hệ</h4>
+                        </div>
+                        <div class="iq-card-body">
+                           <?php if ($error): ?><div class="alert alert-danger"><?php echo h($error); ?></div>
+                           <?php endif; ?>
+                           <div class="list-group mb-3">
+                              <?php if ($addresses): ?>
+                              <?php foreach ($addresses as $address): ?>
+                              <div class="list-group-item d-flex justify-content-between align-items-start">
+                                 <div>
+                                    <strong><?php echo h($address['receiver_name']); ?></strong><br>
+                                    <?php echo h($address['phone']); ?><br>
+                                    <?php echo h($address['address_detail'] . ', ' . $address['ward'] . ', ' . $address['district'] . ', ' . $address['province']); ?>
+                                 </div>
+                                 <div>
+                                    <?php if ((int) $address['is_default'] === 1): ?><span
+                                       class="badge badge-primary">Mặc định</span><?php endif; ?>
+                                 </div>
+                              </div>
+                              <?php endforeach; ?>
+                              <?php else: ?>
+                              <div class="alert alert-info mb-0">Chưa có địa chỉ nào.</div>
+                              <?php endif; ?>
+                           </div>
+                           <form method="post" class="mt-4">
+                              <input type="hidden" name="save_address" value="1">
 
-                     <div class="mt-4">
-                        <h5 class="mb-3">Đơn hàng gần đây</h5>
-                        <div class="table-responsive">
-                           <table class="table table-bordered mb-0">
-                              <thead class="thead-light">
-                                 <tr>
-                                    <th>Mã đơn</th>
-                                    <th>Ngày</th>
-                                    <th>Số sản phẩm</th>
-                                    <th>Tổng tiền</th>
-                                    <th>Trạng thái</th>
-                                 </tr>
-                              </thead>
-                              <tbody>
-                                 <?php foreach ($recentOrders as $order): ?>
-                                    <tr>
-                                       <td>#<?= (int) $order['id'] ?></td>
-                                       <td><?= h($order['date']) ?></td>
-                                       <td><?= (int) ($order['total_qty'] ?? 0) ?></td>
-                                       <td><?= h(money_vn($order['price'])) ?></td>
-                                       <td><?= h($order['status']) ?></td>
-                                    </tr>
-                                 <?php endforeach; ?>
-                                 <?php if (!$recentOrders): ?>
-                                    <tr><td colspan="5" class="text-center text-muted">Chưa có đơn hàng nào.</td></tr>
-                                 <?php endif; ?>
-                              </tbody>
-                           </table>
+                              <div class="custom-control custom-checkbox mb-3">
+                                 <input type="checkbox" class="custom-control-input" id="default-address"
+                                    name="is_default" value="1"
+                                    <?php echo (int) ($addressForm['is_default'] ?? 0) === 1 ? 'checked' : ''; ?>>
+                                 <label class="custom-control-label" for="default-address">Đặt làm mặc định</label>
+                              </div>
+                              <a href="add-address.php" class="btn btn-primary mb-3">
+                                 + Thêm địa chỉ mới
+                              </a>
+                           </form>
                         </div>
                      </div>
-                  <?php else: ?>
-                     <div class="text-center py-5">
-                        <h5 class="mb-3">Bạn chưa đăng nhập</h5>
-                        <p class="text-muted mb-4">Đăng nhập để xem hồ sơ, đơn hàng và địa chỉ đã lưu.</p>
-                        <a href="sign-in.php" class="btn btn-primary mr-2">Đăng nhập</a>
-                        <a href="sign-up.php" class="btn btn-outline-primary">Đăng ký</a>
-                     </div>
-                  <?php endif; ?>
+                  </div>
                </div>
             </div>
          </div>
       </div>
    </div>
 </div>
-
 <?php include 'includes/footer.php'; ?>

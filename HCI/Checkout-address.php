@@ -1,83 +1,97 @@
-
 <?php
-require_once __DIR__ . '/includes/bootstrap.php';
-$page_title = 'Địa chỉ giao hàng';
-require_login('sign-in.php');
-$user = current_user($conn);
-
-$stmt = mysqli_prepare($conn, 'SELECT * FROM address WHERE user_id = ? ORDER BY is_default DESC, id DESC LIMIT 1');
-mysqli_stmt_bind_param($stmt, 'i', $userId);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-$address = $result ? mysqli_fetch_assoc($result) : null;
-mysqli_stmt_close($stmt);
-
-$userId = (int) $user['id'];
-$form = [
-    'receiver_name' => $address['receiver_name'] ?? $user['fullname'],
-    'phone' => $address['phone'] ?? $user['phone'],
-    'address_detail' => $address['address_detail'] ?? '',
-    'ward' => $address['ward'] ?? '',
-    'district' => $address['district'] ?? '',
-    'province' => $address['province'] ?? '',
-    'is_default' => !empty($address['is_default']) ? 1 : 1,
-];
+require_once 'includes/app.php';
+require_login();
+$pageTitle = 'Địa chỉ giao hàng';
+$pageBreadcrumb = 'Địa chỉ giao hàng';
+$user = current_user();
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $form['receiver_name'] = trim($_POST['receiver_name'] ?? '');
-    $form['phone'] = trim($_POST['phone'] ?? '');
-    $form['address_detail'] = trim($_POST['address_detail'] ?? '');
-    $form['ward'] = trim($_POST['ward'] ?? '');
-    $form['district'] = trim($_POST['district'] ?? '');
-    $form['province'] = trim($_POST['province'] ?? '');
-    $form['is_default'] = isset($_POST['is_default']) ? 1 : 0;
+    $receiverName = trim((string) ($_POST['receiver_name'] ?? ''));
+    $phone = trim((string) ($_POST['phone'] ?? ''));
+    $addressDetail = trim((string) ($_POST['address_detail'] ?? ''));
+    $ward = trim((string) ($_POST['ward'] ?? ''));
+    $district = trim((string) ($_POST['district'] ?? ''));
+    $province = trim((string) ($_POST['province'] ?? ''));
+    $isDefault = isset($_POST['is_default']) ? 1 : 0;
 
-    if ($form['receiver_name'] === '' || $form['phone'] === '' || $form['address_detail'] === '' || $form['ward'] === '' || $form['district'] === '' || $form['province'] === '') {
+    if ($receiverName === '' || $phone === '' || $addressDetail === '' || $ward === '' || $district === '' || $province === '') {
         $error = 'Vui lòng nhập đầy đủ địa chỉ.';
-    } elseif (!preg_match('/^[0-9]{9,11}$/', $form['phone'])) {
-        $error = 'Số điện thoại không hợp lệ.';
     } else {
-        $stmt = mysqli_prepare($conn, 'INSERT INTO address (user_id, receiver_name, phone, address_detail, ward, district, province, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE receiver_name = VALUES(receiver_name), phone = VALUES(phone), address_detail = VALUES(address_detail), ward = VALUES(ward), district = VALUES(district), province = VALUES(province), is_default = VALUES(is_default)');
-        mysqli_stmt_bind_param($stmt, 'issssssi', $userId, $form['receiver_name'], $form['phone'], $form['address_detail'], $form['ward'], $form['district'], $form['province'], $form['is_default']);
-        mysqli_stmt_execute($stmt);
+        if ($isDefault) {
+            mysqli_query(db(), 'UPDATE address SET is_default = 0 WHERE user_id = ' . (int) $user['id']);
+        }
+
+        $stmt = mysqli_prepare(db(), 'INSERT INTO address (user_id, receiver_name, phone, address_detail, ward, district, province, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE receiver_name = VALUES(receiver_name), phone = VALUES(phone), address_detail = VALUES(address_detail), ward = VALUES(ward), district = VALUES(district), province = VALUES(province), is_default = VALUES(is_default)');
+        mysqli_stmt_bind_param($stmt, 'issssssi', $user['id'], $receiverName, $phone, $addressDetail, $ward, $district, $province, $isDefault);
+        $ok = mysqli_stmt_execute($stmt);
+        $savedId = (int) mysqli_insert_id(db());
+        if ($savedId <= 0) {
+            $row = fetch_one('SELECT id FROM address WHERE user_id = ' . (int) $user['id'] . ' LIMIT 1');
+            $savedId = (int) ($row['id'] ?? 0);
+        }
+
+        if ($ok) {
+            mysqli_stmt_close($stmt);
+            $_SESSION['selected_address_id'] = $savedId;
+            flash('success', 'Đã lưu địa chỉ.');
+            redirect('Checkout-preview.php');
+        }
+        $error = 'Không thể lưu địa chỉ.';
         mysqli_stmt_close($stmt);
-        $_SESSION['checkout_address_saved'] = 1;
-        header('Location: Checkout-preview.php');
-        exit;
     }
+}
+
+$addresses = user_addresses((int) $user['id']);
+if (!isset($_SESSION['selected_address_id']) && $addresses) {
+    $_SESSION['selected_address_id'] = (int) $addresses[0]['id'];
 }
 
 include 'includes/header.php';
 include 'includes/sidebar.php';
 include 'includes/topnav.php';
 ?>
-
 <div id="content-page" class="content-page">
+   <?php render_flash(); ?>
    <div class="container-fluid">
       <div class="row">
-         <div class="col-sm-12">
+         <div class="col-lg-7">
             <div class="iq-card">
-               <div class="iq-card-header d-flex justify-content-between">
-                  <div class="iq-header-title"><h4 class="card-title">Địa chỉ của bạn</h4></div>
-               </div>
+               <div class="iq-card-header"><h4 class="card-title mb-0">Chọn địa chỉ đã lưu</h4></div>
                <div class="iq-card-body">
-                  <?php if ($error): ?><div class="alert alert-danger"><?= h($error) ?></div><?php endif; ?>
-                  <form method="post" action="">
-                     <div class="form-group"><label>Tên người nhận</label><input type="text" name="receiver_name" class="form-control" value="<?= h($form['receiver_name']) ?>" required></div>
-                     <div class="form-group"><label>Số điện thoại</label><input type="text" name="phone" class="form-control" value="<?= h($form['phone']) ?>" pattern="[0-9]{9,11}" required></div>
-                     <div class="form-group"><label>Địa chỉ</label><input type="text" name="address_detail" class="form-control" value="<?= h($form['address_detail']) ?>" required></div>
-                     <div class="form-group"><label>Phường/Xã</label><input type="text" name="ward" class="form-control" value="<?= h($form['ward']) ?>" required></div>
-                     <div class="form-group"><label>Quận/Huyện</label><input type="text" name="district" class="form-control" value="<?= h($form['district']) ?>" required></div>
-                     <div class="form-group"><label>Tỉnh/Thành phố</label><input type="text" name="province" class="form-control" value="<?= h($form['province']) ?>" required></div>
-                     <div class="form-group">
-                        <div class="custom-control custom-checkbox d-inline-block mt-2 pt-1">
-                           <input type="checkbox" class="custom-control-input" id="defaultAddress" name="is_default" <?= !empty($form['is_default']) ? 'checked' : '' ?>>
-                           <label class="custom-control-label" for="defaultAddress">Đặt làm mặc định</label>
-                        </div>
+                  <?php if ($addresses): ?>
+                     <?php foreach ($addresses as $address): ?>
+                        <label class="d-block border rounded p-3 mb-3 <?php echo ((int) $address['id'] === (int) ($_SESSION['selected_address_id'] ?? 0)) ? 'border-primary' : ''; ?>">
+                           <input type="radio" name="selected_address" value="<?php echo (int) $address['id']; ?>" <?php echo ((int) $address['id'] === (int) ($_SESSION['selected_address_id'] ?? 0)) ? 'checked' : ''; ?> onclick="window.location='Checkout-preview.php?address_id=<?php echo (int) $address['id']; ?>'">
+                           <strong><?php echo h($address['receiver_name']); ?></strong> - <?php echo h($address['phone']); ?><br>
+                           <?php echo h($address['address_detail'] . ', ' . $address['ward'] . ', ' . $address['district'] . ', ' . $address['province']); ?>
+                           <?php if ((int) $address['is_default'] === 1): ?><span class="badge badge-primary ml-2">Mặc định</span><?php endif; ?>
+                        </label>
+                     <?php endforeach; ?>
+                  <?php else: ?>
+                     <div class="alert alert-info">Bạn chưa có địa chỉ nào. Hãy thêm địa chỉ mới bên dưới.</div>
+                  <?php endif; ?>
+               </div>
+            </div>
+         </div>
+         <div class="col-lg-5">
+            <div class="iq-card">
+               <div class="iq-card-header"><h4 class="card-title mb-0">Thêm địa chỉ mới</h4></div>
+               <div class="iq-card-body">
+                  <?php if ($error): ?><div class="alert alert-danger"><?php echo h($error); ?></div><?php endif; ?>
+                  <form method="post">
+                     <div class="form-group"><label>Người nhận</label><input name="receiver_name" class="form-control" value="<?php echo h($user['fullname'] ?? $user['username']); ?>"></div>
+                     <div class="form-group"><label>Số điện thoại</label><input name="phone" class="form-control" value="<?php echo h($user['phone'] ?? ''); ?>"></div>
+                     <div class="form-group"><label>Địa chỉ chi tiết</label><input name="address_detail" class="form-control"></div>
+                     <div class="form-group"><label>Phường/Xã</label><input name="ward" class="form-control"></div>
+                     <div class="form-group"><label>Quận/Huyện</label><input name="district" class="form-control"></div>
+                     <div class="form-group"><label>Tỉnh/Thành phố</label><input name="province" class="form-control"></div>
+                     <div class="custom-control custom-checkbox mb-3">
+                        <input type="checkbox" class="custom-control-input" id="default-address" name="is_default" value="1">
+                        <label class="custom-control-label" for="default-address">Đặt làm mặc định</label>
                      </div>
-                     <button type="submit" class="btn btn-primary">Lưu và tiếp tục</button>
-                     <a href="Checkout.php" class="btn btn-danger">Trở lại</a>
+                     <button class="btn btn-primary">Lưu địa chỉ</button>
+                     <a href="Checkout-preview.php" class="btn btn-outline-secondary">Quay lại</a>
                   </form>
                </div>
             </div>
@@ -85,5 +99,4 @@ include 'includes/topnav.php';
       </div>
    </div>
 </div>
-
 <?php include 'includes/footer.php'; ?>
