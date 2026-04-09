@@ -84,8 +84,8 @@ include 'includes/topnav.php';
                            </div>
                            <p class="mb-4"><?php echo nl2br(h($currentBook['info'] ?? 'Chưa có mô tả.')); ?></p>
                            <div class="d-flex flex-wrap">
-                              <a href="Checkout.php?add=<?php echo (int) $currentBook['id']; ?>" class="btn btn-primary mr-2 mb-2">Thêm vào giỏ</a>
-                              <a href="book-page.php?id=<?php echo (int) $currentBook['id']; ?>&favorite=1" class="btn btn-outline-danger mr-2 mb-2"><?php echo $isFavourite ? 'Bỏ yêu thích' : 'Yêu thích'; ?></a>
+                              <a href="Checkout.php?add=<?php echo (int) $currentBook['id']; ?>" class="btn btn-primary mr-2 mb-2">🛒 Thêm vào giỏ</a>
+                              <a href="book-page.php?id=<?php echo (int) $currentBook['id']; ?>&favorite=1" class="btn btn-outline-danger mr-2 mb-2"><?php echo $isFavourite ? 'Bỏ yêu thích' : '❤️ Yêu thích'; ?></a>
                               <a href="Checkout-preview.php" class="btn btn-outline-primary mb-2">Xem thanh toán</a>
                            </div>
                         </div>

@@ -13,23 +13,29 @@ $perPage = 12;
 $offset = ($page - 1) * $perPage;
 
 $where = [books_visible_condition('b')];
+
 if ($q !== '') {
     $qEsc = esc($q);
     $where[] = "(b.bookname LIKE '%{$qEsc}%' OR b.book_code LIKE '%{$qEsc}%' OR a.fullname LIKE '%{$qEsc}%')";
 }
+
 if ($categoryId > 0) {
     $where[] = 'EXISTS (SELECT 1 FROM book_category bc WHERE bc.book_id = b.id AND bc.category_id = ' . $categoryId . ')';
 }
+
 if ($minPrice !== '' && is_numeric($minPrice)) {
     $where[] = 'COALESCE(b.sell_price, (b.cost_price * (1 + b.profit_percent / 100))) >= ' . (float) $minPrice;
 }
+
 if ($maxPrice !== '' && is_numeric($maxPrice)) {
     $where[] = 'COALESCE(b.sell_price, (b.cost_price * (1 + b.profit_percent / 100))) <= ' . (float) $maxPrice;
 }
+
 $whereSql = implode(' AND ', $where);
 
 $total = fetch_count('SELECT COUNT(*) AS total FROM books b LEFT JOIN authors a ON a.id = b.author_id WHERE ' . $whereSql);
 $totalPages = max(1, (int) ceil($total / $perPage));
+
 if ($page > $totalPages) {
     $page = $totalPages;
     $offset = ($page - 1) * $perPage;
@@ -54,6 +60,7 @@ $rows = fetch_all('
     ORDER BY ' . $orderSql . '
     LIMIT ' . $offset . ', ' . $perPage . '
 ');
+
 $categories = categories_all();
 
 include 'includes/header.php';

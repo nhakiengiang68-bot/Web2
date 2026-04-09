@@ -1,103 +1,129 @@
-<?php include "includes/header.php"; ?>
+<?php
+require_once 'includes/app.php';
+require_login();
 
-<?php include "includes/sidebar.php"; ?>
+$pageTitle = 'Hồ sơ cá nhân';
+$pageBreadcrumb = 'Hồ sơ cá nhân';
 
-<?php include "includes/topnav.php"; ?>
+$user = current_user();
 
-<?php include "includes/database.php"; ?>
+// Lấy thông tin đầy đủ từ database
+$profile = fetch_one('SELECT * FROM users WHERE id = ' . (int)$user['id'] . ' LIMIT 1');
 
-      <!-- Page Content  -->
-      <div id="content-page" class="content-page">
-         <div class="container-fluid">
-            <div class="row">
-               <div class="col-lg-12">
-                  <div class="iq-edit-list-data">
-                     <div class="tab-content">
-                        <div class="tab-pane fade active show" id="personal-information" role="tabpanel">
-                           <div class="iq-card">
-                              <div class="iq-card-header d-flex justify-content-between">
-                                 <div class="iq-header-title">
-                                    <h4 class="card-title">Thông tin cá nhân</h4>
-                                 </div>
-                              </div>
-                              <div class="iq-card-body">
-                                 <form>
-                                    <div class="form-group row align-items-center">
-                                       <div class="col-md-12">
-                                          <div class="profile-img-edit">
-                                             <img class="profile-pic" src="images/user/1.jpg" alt="profile-pic">
-                                             <div class="p-image">
-                                                <i class="ri-pencil-line upload-button"></i>
-                                                <input class="file-upload" type="file" accept="image/*"/>
-                                             </div>
-                                          </div>
-                                       </div>
-                                    </div>
-                                    <div class=" row align-items-center">
-                                       <div class="form-group col-sm-6">
-                                          <label for="fname">Họ:</label>
-                                          <input type="text" class="form-control" id="fname" value="Đào Thiện">
-                                       </div>
-                                       <div class="form-group col-sm-6">
-                                          <label for="lname">Tên:</label>
-                                          <input type="text" class="form-control" id="lname" value="Phát">
-                                       </div>
-                                       <div class="form-group col-sm-6">
-                                          <label class="d-block">Giới tính:</label>
-                                          <div class="custom-control custom-radio custom-control-inline">
-                                             <input type="radio" id="customRadio6" name="customRadio1" class="custom-control-input" checked="">
-                                             <label class="custom-control-label" for="customRadio6"> Nam </label>
-                                          </div>
-                                          <div class="custom-control custom-radio custom-control-inline">
-                                             <input type="radio" id="customRadio7" name="customRadio1" class="custom-control-input">
-                                             <label class="custom-control-label" for="customRadio7"> Nữ </label>
-                                          </div>
-                                       </div>
-                                       <div class="form-group col-sm-6">
-                                          <label for="dob">Ngày sinh:</label>
-                                          <input type="date" class="form-control" id="dob" value="2006-10-04">
-                                       </div>
-                                       <div class="form-group col-sm-6">
-                                          <label>Quốc gia:</label>
-                                          <select class="form-control" id="exampleFormControlSelect3">
-                                             <option>Laos</option>
-                                             <option>China</option>
-                                             <option selected="">Việt Nam</option>
-                                             <option>Indo</option>
-                                             <option>USA</option>
-                                          </select>
-                                       </div>
-                                       <div class="form-group col-sm-6">
-                                          <label>Tỉnh/Thành phố:</label>
-                                          <select class="form-control" id="exampleFormControlSelect4">
-                                             <option></option>
-                                             <option>Hà Nội</option>
-                                             <option selected="">Hồ Chí Minh</option>
-                                             <option>Hồ Chí Minh</option>
-                                             <option>Buôn Ma Thuột</option>
-                                          </select>
-                                       </div>
-                                       <div class="form-group col-sm-12">
-                                          <label>Địa chỉ:</label>
-                                          <textarea class="form-control" name="address" rows="5" style="line-height: 22px;">
-                                             10/41A Âu Dương Lân
-                                             Quận 8, Hồ Chí Minh
-                                             Việt Nam
-                                          </textarea>
-                                       </div>
-                                    </div>
-                                    <a href="profile.php" class="btn btn-primary mr-2">Lưu</a>
-                                    <a href="profile.php" class="btn btn-danger mr-2">Hủy bỏ</a>
-                                 </form>
-                              </div>
-                           </div>
+include 'includes/header.php';
+include 'includes/sidebar.php';
+include 'includes/topnav.php';
+?>
+
+<div id="content-page" class="content-page">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-lg-12">
+
+                <div class="iq-card">
+                    <div class="iq-card-header d-flex justify-content-between align-items-center">
+                        <div class="iq-header-title">
+                            <h4 class="card-title">Hồ sơ cá nhân</h4>
                         </div>
-                     </div>
-                  </div>
-               </div>
+                        <a href="edit-profile.php" class="btn btn-primary">
+                            <i class="ri-edit-line"></i> Sửa thông tin
+                        </a>
+                    </div>
+
+                    <div class="iq-card-body">
+                        <div class="row">
+
+                            <!-- Phần Avatar + Thông tin cơ bản -->
+                            <div class="col-md-4 text-center mb-4">
+                                <div class="profile-img-edit mb-3">
+                                    <img class="profile-pic rounded-circle border" 
+                                         src="<?php echo h($profile['avatar'] ?? 'images/user/1.jpg'); ?>" 
+                                         alt="Avatar"
+                                         style="width: 160px; height: 160px; object-fit: cover;">
+                                </div>
+                                <h5 class="mb-1"><?php echo h($profile['fullname'] ?? 'Chưa cập nhật'); ?></h5>
+                                <p class="text-muted mb-0">@<?php echo h($profile['username'] ?? ''); ?></p>
+                            </div>
+
+                            <!-- Phần chi tiết thông tin -->
+                            <div class="col-md-8">
+                                <div class="row">
+
+                                    <!-- Thông tin tài khoản -->
+                                    <div class="col-12">
+                                        <h5 class="mb-3 text-primary">
+                                            <i class="ri-user-3-line"></i> Thông tin tài khoản
+                                        </h5>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Tên tài khoản</label>
+                                        <p class="mb-0 fw-bold"><?php echo h($profile['username'] ?? ''); ?></p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Email</label>
+                                        <p class="mb-0 fw-bold"><?php echo h($profile['email'] ?? ''); ?></p>
+                                    </div>
+
+                                    <!-- Thông tin cá nhân -->
+                                    <div class="col-12 mt-4">
+                                        <h5 class="mb-3 text-primary">
+                                            <i class="ri-profile-line"></i> Thông tin cá nhân
+                                        </h5>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Họ và tên</label>
+                                        <p class="mb-0"><?php echo h($profile['fullname'] ?? 'Chưa cập nhật'); ?></p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Số điện thoại</label>
+                                        <p class="mb-0"><?php echo h($profile['phone'] ?? 'Chưa cập nhật'); ?></p>
+                                    </div>
+
+                                    <?php if (!empty($profile['gender'])): ?>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Giới tính</label>
+                                        <p class="mb-0"><?php echo h($profile['gender']) === 'male' ? 'Nam' : 'Nữ'; ?></p>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (!empty($profile['dob'])): ?>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="text-muted small d-block">Ngày sinh</label>
+                                        <p class="mb-0"><?php echo date('d/m/Y', strtotime($profile['dob'])); ?></p>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (!empty($profile['address'])): ?>
+                                    <div class="col-12 mb-3">
+                                        <label class="text-muted small d-block">Địa chỉ</label>
+                                        <p class="mb-0"><?php echo nl2br(h($profile['address'])); ?></p>
+                                    </div>
+                                    <?php endif; ?>
+
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Các nút hành động -->
+                        <div class="border-top pt-4 mt-4">
+                            <a href="edit-profile.php" class="btn btn-primary mr-2">
+                                <i class="ri-edit-line"></i> Sửa thông tin tài khoản
+                            </a>
+                            <a href="favourite.php" class="btn btn-outline-info mr-2">
+                                <i class="ri-heart-line"></i> Danh sách yêu thích
+                            </a>
+                            <a href="change-password.php" class="btn btn-outline-warning">
+                                <i class="ri-lock-password-line"></i> Đổi mật khẩu
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-         </div>
-      </div>
-   </div>
+        </div>
+    </div>
+</div>
 
 <?php include "includes/footer.php"; ?>
